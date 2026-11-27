@@ -9,6 +9,7 @@ $sourceId  = preg_replace('/[^a-f0-9]/', '', $in['source_id'] ?? '');
 $sourceExt = preg_replace('/[^a-z0-9]/', '', strtolower($in['source_ext'] ?? ''));
 $clips     = $in['clips'] ?? [];
 $overlays  = $in['overlays'] ?? [];
+$music     = $in['music'] ?? [];
 $muted     = !empty($in['muted']);
 
 if (!$sourceId || !file_exists(UPLOADS_DIR . "/$sourceId.$sourceExt")) {
@@ -58,6 +59,7 @@ if (is_array($overlays)) {
             $bg = (string)($o['bg'] ?? '');
             if ($bg !== '' && !preg_match('/^rgba?\([0-9.,\s]+\)$/', $bg)) $bg = '';
             $base['bg'] = $bg;
+            $base['rotation'] = ((int)($o['rotation'] ?? 0)) % 360;
         } else {
             $srcId = preg_replace('/[^a-f0-9]/', '', (string)($o['srcId'] ?? ''));
             $ext   = preg_replace('/[^a-z0-9]/', '', strtolower((string)($o['ext'] ?? '')));
@@ -65,21 +67,42 @@ if (is_array($overlays)) {
             if (!file_exists(UPLOADS_DIR . "/$srcId.$ext")) continue;
             $base['srcId'] = $srcId;
             $base['ext']   = $ext;
-            
-            $cx = (float)($o['cropX'] ?? 0);
-            $cy = (float)($o['cropY'] ?? 0);
-	    $cw = (float)($o['cropW'] ?? 1);
-	    $ch = (float)($o['cropH'] ?? 1);
-	    $cx = max(0, min(0.99, $cx));
-	    $cy = max(0, min(0.99, $cy));
-	    $cw = max(0.01, min(1 - $cx, $cw));
-	    $ch = max(0.01, min(1 - $cy, $ch));
-	    $base['cropX'] = $cx;
-	    $base['cropY'] = $cy;
-  	    $base['cropW'] = $cw;
-	    $base['cropH'] = $ch;
+
+            $cx = max(0, min(0.99, (float)($o['cropX'] ?? 0)));
+            $cy = max(0, min(0.99, (float)($o['cropY'] ?? 0)));
+            $cw = max(0.01, min(1 - $cx, (float)($o['cropW'] ?? 1)));
+            $ch = max(0.01, min(1 - $cy, (float)($o['cropH'] ?? 1)));
+            $base['cropX'] = $cx;
+            $base['cropY'] = $cy;
+            $base['cropW'] = $cw;
+            $base['cropH'] = $ch;
         }
         $cleanOverlays[] = $base;
+    }
+}
+
+$cleanMusic = [];
+if (is_array($music)) {
+    foreach ($music as $m) {
+        $srcId = preg_replace('/[^a-f0-9]/', '', (string)($m['srcId'] ?? ''));
+        $ext   = preg_replace('/[^a-z0-9]/', '', strtolower((string)($m['ext'] ?? '')));
+        if (!$srcId || !in_array($ext, ['mp3','m4a','aac','wav','ogg','opus','flac'])) continue;
+        if (!file_exists(UPLOADS_DIR . "/$srcId.$ext")) continue;
+
+        $tStart = max(0, (float)($m['tStart'] ?? 0));
+        $tEnd   = (float)($m['tEnd'] ?? 0);
+        if ($tEnd <= $tStart + 0.05) continue;
+
+        $cleanMusic[] = [
+            'srcId'       => $srcId,
+            'ext'         => $ext,
+            'tStart'      => $tStart,
+            'tEnd'        => $tEnd,
+            'sourceStart' => max(0, (float)($m['sourceStart'] ?? 0)),
+            'volume'      => max(0, min(2, (float)($m['volume'] ?? 1))),
+            'fadeIn'      => max(0, min(10, (float)($m['fadeIn'] ?? 0))),
+            'fadeOut'     => max(0, min(10, (float)($m['fadeOut'] ?? 0))),
+        ];
     }
 }
 
@@ -93,6 +116,7 @@ file_put_contents(JOBS_DIR . "/$jobId.json", json_encode([
     'source_ext' => $sourceExt,
     'clips'      => $cleanClips,
     'overlays'   => $cleanOverlays,
+    'music'      => $cleanMusic,
     'muted'      => $muted,
     'crf'        => max(18, min(30, (int)($in['crf'] ?? 23))),
     'created_at' => time(),

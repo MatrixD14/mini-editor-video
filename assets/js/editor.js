@@ -23,10 +23,10 @@ const playheadHandle  = playheadEl.querySelector('.playhead-handle');
 const bufferingEl     = $('#buffering');
 const zoomLabel       = $('#zoom-label');
 const textModal       = $('#text-modal');
-const cropModal     = $('#crop-modal');
-const cropStage     = $('#crop-stage');
-const cropImg       = $('#crop-img');
-const cropSel       = $('#crop-selection');
+const cropModal       = $('#crop-modal');
+const cropStage       = $('#crop-stage');
+const cropImg         = $('#crop-img');
+const cropSel         = $('#crop-selection');
 
 let PPS = 10;
 let zoomIndex = 3;
@@ -34,6 +34,7 @@ let suppressAutoScroll = false;
 let scrollRaf = null;
 let editingOverlayId = null;
 let isNewOverlay = false;
+let originalOverlayState = null;
 
 const state = {
   source: null,
@@ -82,7 +83,6 @@ function minPPSFor(duration) {
   const vw = (timelineScroll.clientWidth || 400) - PAD_LEFT - PAD_RIGHT;
   return Math.max(0.1, vw / Math.max(duration, 1));
 }
-
 function updateTimeDisplay(vt) {
   $('#time-current').textContent = formatTime(vt);
   $('#time-total').textContent   = formatTime(totalDuration());
@@ -462,12 +462,15 @@ function registerTap(id, onSingle, onDouble) {
   }
 }
 
-/* ---------- Botões de clipe ---------- */
+/* ---------- Botões de clipe + overlay ---------- */
 function updateAllButtons() {
   const idx = state.currentClipIndex;
   $('#btn-delete').disabled     = state.clips.length <= 1;
   $('#btn-move-left').disabled  = state.clips.length <= 1 || idx <= 0;
   $('#btn-move-right').disabled = state.clips.length <= 1 || idx >= state.clips.length - 1;
+  const hasOv = !!state.selectedOverlayId;
+  $('#btn-overlay-front').disabled = !hasOv;
+  $('#btn-overlay-back').disabled  = !hasOv;
 }
 function doSplit() {
   if (!state.clips.length) return;
@@ -519,6 +522,30 @@ function toggleMute() {
 }
 $('#btn-mute').onclick = toggleMute;
 
+/* ---------- Hierarquia (z-order) ---------- */
+function moveOverlayForward() {
+  if (!state.selectedOverlayId) return;
+  const idx = state.overlays.findIndex(o => o.id === state.selectedOverlayId);
+  if (idx < 0 || idx >= state.overlays.length - 1) return;
+  [state.overlays[idx], state.overlays[idx + 1]] = [state.overlays[idx + 1], state.overlays[idx]];
+  renderOverlayElements();
+  renderOverlayPills();
+  updateOverlayVisibility();
+  snapshot();
+}
+function moveOverlayBackward() {
+  if (!state.selectedOverlayId) return;
+  const idx = state.overlays.findIndex(o => o.id === state.selectedOverlayId);
+  if (idx <= 0) return;
+  [state.overlays[idx], state.overlays[idx - 1]] = [state.overlays[idx - 1], state.overlays[idx]];
+  renderOverlayElements();
+  renderOverlayPills();
+  updateOverlayVisibility();
+  snapshot();
+}
+$('#btn-overlay-front').onclick = moveOverlayForward;
+$('#btn-overlay-back').onclick  = moveOverlayBackward;
+
 /* ---------- Overlays: pílulas por trilha ---------- */
 function renderOverlayPills() {
   trackText.innerHTML = '<span class="track-label">T</span>';
@@ -560,6 +587,7 @@ function renderOverlayPills() {
 function startOverlayDrag(e, ov, mode) {
   e.preventDefault(); e.stopPropagation();
   state.selectedOverlayId = ov.id;
+  updateAllButtons();
   renderOverlayPills();
   updateOverlaySelectionVisual();
   const startX = e.clientX;
@@ -591,9 +619,9 @@ function startOverlayDrag(e, ov, mode) {
     if (moved) {
       snapshot();
     } else if (mode === 'move') {
-      // tap (sem arrasto) — registra para detectar duplo-toque
       registerTap(ov.id, null, () => {
         if (ov.type === 'text') openTextModal(ov);
+        else if (ov.type === 'image') openImageEditModal(ov);
       });
     }
   };
@@ -605,6 +633,7 @@ function startOverlayDrag(e, ov, mode) {
 /* ---------- Overlays: elementos no preview ---------- */
 function renderOverlayElements() {
   overlayLayer.innerHTML = '';
+  // A ORDEM do array é o z-order: quem vem depois renderiza em cima.
   state.overlays.forEach(ov => {
     let el;
     if (ov.type === 'text') {
@@ -650,6 +679,7 @@ function removeOverlay(id) {
   renderOverlayPills();
   renderOverlayElements();
   updateOverlayVisibility();
+  updateAllButtons();
   snapshot();
 }
 
@@ -685,13 +715,13 @@ function positionOverlays() {
       el.style.fontSize = (ov.fontSize * v.height) + 'px';
       el.style.color = ov.color;
       el.style.background = ov.bg || 'transparent';
+      el.style.transform = 'rotate(' + (ov.rotation || 0) + 'deg)';
     } else {
       const dispW = ov.w * v.width;
       const dispH = ov.h * v.height;
       el.style.width  = dispW + 'px';
       el.style.height = dispH + 'px';
       el.style.backgroundImage = `url('uploads/${ov.srcId}.${ov.ext}')`;
-      // recorte: frações → pixels do wrapper
       el.style.backgroundSize =
         `${dispW / (ov.cropW || 1)}px ${dispH / (ov.cropH || 1)}px`;
       el.style.backgroundPosition =
@@ -720,12 +750,17 @@ function updateOverlaySelectionVisual() {
     if (ov.id === state.selectedOverlayId) el.classList.add('selected');
     else el.classList.remove('selected');
   });
+  const hasOv = !!state.selectedOverlayId;
+  const f = $('#btn-overlay-front'), b = $('#btn-overlay-back');
+  if (f) f.disabled = !hasOv;
+  if (b) b.disabled = !hasOv;
 }
 
 function startPreviewMove(e, ov) {
   e.preventDefault(); e.stopPropagation();
   state.selectedOverlayId = ov.id;
   updateOverlaySelectionVisual();
+  updateAllButtons();
   renderOverlayPills();
 
   const v = getVideoContentRect();
@@ -733,8 +768,6 @@ function startPreviewMove(e, ov) {
   const oX = ov.x, oY = ov.y;
   let moved = false;
 
-  // Texto não tem largura fixa (auto). Medimos o elemento renderizado
-  // para não prender o texto no canto. Imagem usa ov.w / ov.h direto.
   const el = overlayLayer.querySelector(`[data-ov-id="${ov.id}"]`);
   let clampW, clampH;
   if (ov.type === 'text') {
@@ -777,6 +810,7 @@ function startImageResize(e, ov) {
   e.preventDefault(); e.stopPropagation();
   state.selectedOverlayId = ov.id;
   updateOverlaySelectionVisual();
+  updateAllButtons();
   renderOverlayPills();
 
   const v = getVideoContentRect();
@@ -817,10 +851,11 @@ $('#btn-add-text').onclick = () => {
     fontSize: 0.08,
     color: '#ffffff',
     bg: 'rgba(0,0,0,0.6)',
+    rotation: 0,
   };
   state.overlays.push(ov);
   state.selectedOverlayId = ov.id;
-  renderOverlayPills(); renderOverlayElements(); updateOverlayVisibility();
+  renderOverlayPills(); renderOverlayElements(); updateOverlayVisibility(); updateAllButtons();
   openTextModal(ov, true);
 };
 
@@ -828,10 +863,13 @@ $('#btn-add-text').onclick = () => {
 function openTextModal(ov, isNew = false) {
   editingOverlayId = ov.id;
   isNewOverlay = isNew;
+  originalOverlayState = { ...ov };
   $('#modal-text').value = ov.text;
   $('#modal-size').value = Math.round((ov.fontSize || 0.08) * 100);
   $('#modal-color').value = ov.color || '#ffffff';
   $('#modal-bg').value = ov.bg || '';
+  $('#modal-rotation').value = ov.rotation || 0;
+  $('#modal-rotation-value').textContent = (ov.rotation || 0) + '°';
   textModal.classList.add('open');
   setPlaying(false);
   setTimeout(() => $('#modal-text').focus(), 50);
@@ -840,13 +878,27 @@ function closeTextModal() {
   textModal.classList.remove('open');
   editingOverlayId = null;
   isNewOverlay = false;
+  originalOverlayState = null;
 }
+$('#modal-rotation').addEventListener('input', (e) => {
+  const deg = parseInt(e.target.value, 10) || 0;
+  $('#modal-rotation-value').textContent = deg + '°';
+  const ov = state.overlays.find(o => o.id === editingOverlayId);
+  if (ov) { ov.rotation = deg; positionOverlays(); }
+});
 $('#modal-cancel').onclick = () => {
+  // Restaura estado original (rotação, cor, texto, etc.)
+  if (originalOverlayState && !isNewOverlay && editingOverlayId) {
+    const ov = state.overlays.find(o => o.id === editingOverlayId);
+    if (ov) Object.assign(ov, originalOverlayState);
+    renderOverlayPills(); renderOverlayElements(); updateOverlayVisibility();
+  }
+  // Se for criação nova, remove o overlay
   if (isNewOverlay && editingOverlayId) {
     const id = editingOverlayId;
     state.overlays = state.overlays.filter(o => o.id !== id);
     if (state.selectedOverlayId === id) state.selectedOverlayId = null;
-    renderOverlayPills(); renderOverlayElements(); updateOverlayVisibility();
+    renderOverlayPills(); renderOverlayElements(); updateOverlayVisibility(); updateAllButtons();
     snapshot();
   }
   closeTextModal();
@@ -858,6 +910,7 @@ $('#modal-save').onclick = () => {
     ov.fontSize = Math.max(0.01, (parseInt($('#modal-size').value, 10) || 8) / 100);
     ov.color = $('#modal-color').value || '#ffffff';
     ov.bg = $('#modal-bg').value || '';
+    ov.rotation = parseInt($('#modal-rotation').value, 10) || 0;
     renderOverlayPills(); renderOverlayElements(); updateOverlayVisibility();
     snapshot();
   }
@@ -868,7 +921,7 @@ $('#modal-delete').onclick = () => {
   state.overlays = state.overlays.filter(o => o.id !== id);
   if (state.selectedOverlayId === id) state.selectedOverlayId = null;
   closeTextModal();
-  renderOverlayPills(); renderOverlayElements(); updateOverlayVisibility();
+  renderOverlayPills(); renderOverlayElements(); updateOverlayVisibility(); updateAllButtons();
   snapshot();
 };
 
@@ -895,9 +948,6 @@ $('#image-file').onchange = async (e) => {
       const w = 0.3;
       const aspect = data.w > 0 ? data.h / data.w : 1;
       const videoAspect = (state.source.width || 1920) / (state.source.height || 1080);
-      const hFrac = clamp(w * aspect / videoAspect, 0.03, 1);
-
-      // ajusta w/h para já refletir o recorte (o que sobra após crop)
       const dispAspect = (cw / ch) * aspect;
       const hFinal = clamp(w / dispAspect * videoAspect, 0.03, 1);
 
@@ -914,7 +964,7 @@ $('#image-file').onchange = async (e) => {
       };
       state.overlays.push(ov);
       state.selectedOverlayId = ov.id;
-      renderOverlayPills(); renderOverlayElements(); updateOverlayVisibility();
+      renderOverlayPills(); renderOverlayElements(); updateOverlayVisibility(); updateAllButtons();
       snapshot();
     },
     onCancel: () => { URL.revokeObjectURL(localUrl); },
@@ -929,13 +979,10 @@ function openImageEditModal(ov) {
     confirmLabel: 'Salvar',
     showDelete: true,
     onConfirm: (cx, cy, cw, ch) => {
-      // recalcula h para manter a proporção visual correta
-      const oldW = ov.w, oldH = ov.h;
       const oldCropAspect = (ov.cropW || 1) / (ov.cropH || 1);
       const newCropAspect = cw / ch;
       const ratio = newCropAspect / oldCropAspect;
-      ov.w = clamp(oldW * ratio, 0.03, 1 - ov.x);
-      ov.h = oldH;
+      ov.w = clamp(ov.w * ratio, 0.03, 1 - ov.x);
       ov.cropX = cx; ov.cropY = cy; ov.cropW = cw; ov.cropH = ch;
       renderOverlayPills(); renderOverlayElements(); updateOverlayVisibility();
       snapshot();
@@ -943,6 +990,7 @@ function openImageEditModal(ov) {
     onDelete: () => removeOverlay(ov.id),
   });
 }
+
 /* ---------- Atalhos ---------- */
 document.addEventListener('keydown', (e) => {
   if (!state.clips.length) return;
@@ -954,6 +1002,7 @@ document.addEventListener('keydown', (e) => {
     if (cropModal.classList.contains('open')) { $('#crop-cancel').click(); return; }
     state.selectedOverlayId = null;
     updateOverlaySelectionVisual();
+    updateAllButtons();
     return;
   }
 
@@ -973,7 +1022,7 @@ document.addEventListener('keydown', (e) => {
         const id = state.selectedOverlayId;
         state.overlays = state.overlays.filter(o => o.id !== id);
         state.selectedOverlayId = null;
-        renderOverlayPills(); renderOverlayElements(); updateOverlayVisibility(); snapshot();
+        renderOverlayPills(); renderOverlayElements(); updateOverlayVisibility(); updateAllButtons(); snapshot();
       } else doDelete();
       break;
     case '+': case '=': e.preventDefault(); zoomIn(); break;
@@ -1026,6 +1075,7 @@ window.addEventListener('resize', () => {
   if (!state.clips.length) return;
   relayout(); renderRuler(); renderOverlayPills(); positionOverlays(); updatePlayhead();
 });
+
 /* ---------- Crop modal ---------- */
 const cropState = {
   cropX: 0, cropY: 0, cropW: 1, cropH: 1,
@@ -1160,4 +1210,5 @@ $('#crop-delete').onclick = () => {
   closeCropModal();
   if (cb) cb();
 };
+
 })();

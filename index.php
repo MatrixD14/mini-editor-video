@@ -38,6 +38,7 @@
   .preview-text {
     padding: 2px 6px; border-radius: 3px; line-height: 1.15;
     font-family: sans-serif; white-space: pre;
+    transform-origin: center center;
   }
   .preview-text.selected {
     outline: 2px dashed #ffcc00;
@@ -48,9 +49,6 @@
     position: absolute;
     background-repeat: no-repeat;
     background-color: transparent;
-   }
-  .preview-image-wrapper.selected .preview-image {
-    border-color: #ffcc00;
   }
   .resize-handle {
     position: absolute;
@@ -88,7 +86,6 @@
   .toolbar button.active  { background:#5a4a00; color:#ffcc00; }
   .toolbar button:disabled { opacity:.35; cursor:not-allowed; }
 
-  /* Timecode empilhado */
   .time-block {
     margin-left:auto;
     display: flex;
@@ -119,7 +116,7 @@
     overflow-x:auto; overflow-y:hidden;
     touch-action: pan-x; -webkit-overflow-scrolling: touch;
   }
-  #timeline-scroll::-webkit-scrollbar { height:6px; }
+  #timeline-scroll::-webkit-scrollbar { height:20px; }
   #timeline-scroll::-webkit-scrollbar-thumb { background:#333; border-radius:3px; }
 
   #timeline-content { position:relative; height:122px; min-width:100%; }
@@ -144,7 +141,6 @@
     pointer-events: none;
   }
 
-  /* Trilhas separadas */
   #overlay-track-text {
     position:absolute; top:64px; left:0; height:28px; width:100%;
     background:#181a28;
@@ -219,6 +215,20 @@
     width: 60px; height: 34px; padding: 0; border: 1px solid #333;
     border-radius: 5px; background: transparent;
   }
+  #text-modal-inner input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    height: 4px; background: #333; border-radius: 2px; outline: none;
+    padding: 0;
+  }
+  #text-modal-inner input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #2a6df4; border: 2px solid #fff; cursor: pointer;
+  }
+  #text-modal-inner input[type=range]::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #2a6df4; border: 2px solid #fff; cursor: pointer;
+  }
   #text-modal-inner select {
     width: 100%; padding: .5rem; border: 1px solid #333; border-radius: 5px;
     background: #0f0f12; color: #eee; font-size: .9rem;
@@ -229,61 +239,60 @@
   #modal-delete { background: #b02030; color: #fff; border: 0; border-radius: 6px; }
   #modal-save   { background: #2a6df4; color: #fff; border: 0; border-radius: 6px; }
   #modal-cancel { background: #2a2a33; color: #eee; border: 0; border-radius: 6px; }
-  /* Crop modal */
-#crop-modal {
-  display: none; position: fixed; inset: 0; background: #000a;
-  z-index: 100; align-items: center; justify-content: center; padding: 16px;
-}
-#crop-modal.open { display: flex; }
-#crop-modal-inner {
-  background: #1a1a22; border-radius: 10px; padding: 16px;
-  width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto;
-}
-#crop-modal-inner h3 { margin: 0 0 .8rem; font-size: 1rem; }
-#crop-stage {
-  position: relative; margin: 1rem 0; overflow: hidden;
-  background: #000; user-select: none; touch-action: none;
-}
-#crop-img {
-  display: block; width: 100%; height: auto;
-  user-select: none; pointer-events: none;
-}
-#crop-selection {
-  position: absolute; box-sizing: border-box;
-  border: 2px solid #ffcc00;
-  box-shadow: 0 0 0 9999px rgba(0,0,0,0.65);
-  cursor: move; touch-action: none;
-}
-.crop-handle {
-  position: absolute; width: 20px; height: 20px;
-  background: #ffcc00; border: 2px solid #fff;
-  border-radius: 50%; touch-action: none;
-  box-sizing: border-box;
-}
-.crop-handle.nw { top: -10px; left: -10px;  cursor: nwse-resize; }
-.crop-handle.ne { top: -10px; right: -10px; cursor: nesw-resize; }
-.crop-handle.sw { bottom: -10px; left: -10px;  cursor: nesw-resize; }
-.crop-handle.se { bottom: -10px; right: -10px; cursor: nwse-resize; }
-#crop-modal-inner .actions { display: flex; gap: .5rem; margin-top: 1rem; }
-#crop-modal-inner .actions button { flex: 1; padding: .6rem; border: 0; border-radius: 6px; font-size: .9rem; cursor: pointer; }
-#crop-delete { background: #b02030; color: #fff; }
-#crop-cancel { background: #2a2a33; color: #eee; }
-#crop-reset  { background: #2a2a33; color: #eee; }
-#crop-confirm{ background: #2a6df4; color: #fff; }
 
-/* Delete no preview da imagem */
-.preview-image-wrapper .delete-btn {
-  position: absolute; top: -11px; right: -11px;
-  width: 24px; height: 24px; padding: 0;
-  background: #b02030; border: 2px solid #fff;
-  border-radius: 50%; color: #fff; font-size: 16px;
-  line-height: 1; cursor: pointer; z-index: 11;
-  display: none; align-items: center; justify-content: center;
-}
-.preview-image-wrapper.selected .delete-btn { display: flex; }
-.preview-image-wrapper.selected {
-  outline: 2px solid #ffcc00; outline-offset: 2px;
-}
+  #crop-modal {
+    display: none; position: fixed; inset: 0; background: #000a;
+    z-index: 100; align-items: center; justify-content: center; padding: 16px;
+  }
+  #crop-modal.open { display: flex; }
+  #crop-modal-inner {
+    background: #1a1a22; border-radius: 10px; padding: 16px;
+    width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto;
+  }
+  #crop-modal-inner h3 { margin: 0 0 .8rem; font-size: 1rem; }
+  #crop-stage {
+    position: relative; margin: 1rem 0; overflow: hidden;
+    background: #000; user-select: none; touch-action: none;
+  }
+  #crop-img {
+    display: block; width: 100%; height: auto;
+    user-select: none; pointer-events: none;
+  }
+  #crop-selection {
+    position: absolute; box-sizing: border-box;
+    border: 2px solid #ffcc00;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.65);
+    cursor: move; touch-action: none;
+  }
+  .crop-handle {
+    position: absolute; width: 20px; height: 20px;
+    background: #ffcc00; border: 2px solid #fff;
+    border-radius: 50%; touch-action: none;
+    box-sizing: border-box;
+  }
+  .crop-handle.nw { top: -10px; left: -10px;  cursor: nwse-resize; }
+  .crop-handle.ne { top: -10px; right: -10px; cursor: nesw-resize; }
+  .crop-handle.sw { bottom: -10px; left: -10px;  cursor: nesw-resize; }
+  .crop-handle.se { bottom: -10px; right: -10px; cursor: nwse-resize; }
+  #crop-modal-inner .actions { display: flex; gap: .5rem; margin-top: 1rem; }
+  #crop-modal-inner .actions button { flex: 1; padding: .6rem; border: 0; border-radius: 6px; font-size: .9rem; cursor: pointer; }
+  #crop-delete { background: #b02030; color: #fff; }
+  #crop-cancel { background: #2a2a33; color: #eee; }
+  #crop-reset  { background: #2a2a33; color: #eee; }
+  #crop-confirm{ background: #2a6df4; color: #fff; }
+
+  .preview-image-wrapper .delete-btn {
+    position: absolute; top: -11px; right: -11px;
+    width: 24px; height: 24px; padding: 0;
+    background: #b02030; border: 2px solid #fff;
+    border-radius: 50%; color: #fff; font-size: 16px;
+    line-height: 1; cursor: pointer; z-index: 11;
+    display: none; align-items: center; justify-content: center;
+  }
+  .preview-image-wrapper.selected .delete-btn { display: flex; }
+  .preview-image-wrapper.selected {
+    outline: 2px solid #ffcc00; outline-offset: 2px;
+  }
 </style>
 </head>
 <body>
@@ -315,6 +324,8 @@
       <input type="file" id="image-file" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp" style="display:none">
       <button id="btn-undo" title="Desfazer (Ctrl+Z)" disabled>↶</button>
       <button id="btn-redo" title="Refazer (Ctrl+Y)" disabled>↷</button>
+      <button id="btn-overlay-front" title="Trazer overlay para frente" disabled>⬆</button>
+      <button id="btn-overlay-back"  title="Enviar overlay para trás" disabled>⬇</button>
       <span class="zoom-group">
         <button id="btn-zoom-out" title="Zoom out (-)">−</button>
         <span id="zoom-label">1 px/s</span>
@@ -393,6 +404,11 @@
           <option value="rgba(255,255,255,0.7)">Branco 70%</option>
         </select>
       </div>
+    </div>
+    <label>Rotação</label>
+    <div class="row">
+      <input type="range" id="modal-rotation" min="0" max="360" step="5" value="0" style="flex:1">
+      <span id="modal-rotation-value" style="min-width:52px;text-align:right;color:#aaa;font-size:.85rem;font-variant-numeric:tabular-nums">0°</span>
     </div>
     <div class="actions">
       <button id="modal-delete">Apagar</button>
